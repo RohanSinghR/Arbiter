@@ -1,83 +1,177 @@
-import { useState, useCallback } from "react";
-import { Search, ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import ReasoningGraph from "@/components/graph/ReasoningGraph";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  type Node,
+  type Edge,
+  type NodeMouseHandler,
+  ReactFlowProvider,
+  useReactFlow,
+  MarkerType,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ReasoningNode } from "@/components/graph/ReasoningNode";
+import { NodeDetailPanel } from "@/components/graph/NodeDetailPanel";
+import { buildSteps, ReasoningStep } from "@/lib/reasoning-data";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 
-const Demo = () => {
-  const navigate = useNavigate();
-  const [ticker, setTicker] = useState("");
-  const [activeTicker, setActiveTicker] = useState("");
+const nodeTypes = { reasoning: ReasoningNode };
+
+const NODE_X_GAP = 360;
+const NODE_Y = 160;
+
+function DemoCanvas({ ticker }: { ticker: string }) {
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [selected, setSelected] = useState<ReasoningStep | null>(null);
+  const [open, setOpen] = useState(false);
   const [running, setRunning] = useState(false);
-  const [runKey, setRunKey] = useState(0);
+  const { fitView } = useReactFlow();
 
-  const handleAnalyze = useCallback(() => {
-    const t = ticker.trim().toUpperCase();
-    if (!t) return;
-    setActiveTicker(t);
+  const steps = useMemo(() => buildSteps(ticker), [ticker]);
+
+  const run = useCallback(() => {
+    setNodes([]);
+    setEdges([]);
     setRunning(true);
-    setRunKey((k) => k + 1);
+
+    steps.forEach((step, i) => {
+      setTimeout(() => {
+        const newNode: Node = {
+          id: step.id,
+          type: "reasoning",
+          position: { x: 60 + i * NODE_X_GAP, y: NODE_Y },
+          data: { step, highlightTicker: ticker.toUpperCase() },
+          draggable: true,
+        };
+        setNodes((nds) => [...nds, newNode]);
+
+        if (i > 0) {
+          const newEdge: Edge = {
+            id: `e-${steps[i - 1].id}-${step.id}`,
+            source: steps[i - 1].id,
+            target: step.id,
+            animated: true,
+            style: { stroke: "#2D9E8F", strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#2D9E8F" },
+          };
+          setEdges((eds) => [...eds, newEdge]);
+        }
+
+        setTimeout(() => fitView({ padding: 0.2, duration: 600 }), 50);
+
+        if (i === steps.length - 1) setRunning(false);
+      }, i * 700);
+    });
+  }, [steps, ticker, fitView]);
+
+  useEffect(() => {
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker]);
 
+  const onNodeClick: NodeMouseHandler = (_, node) => {
+    const data = node.data as { step: ReasoningStep };
+    setSelected(data.step);
+    setOpen(true);
+  };
+
   return (
-    <div className="flex flex-col h-screen">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/")}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground text-xs font-bold">AT</span>
-            </div>
-            <h1 className="text-lg font-semibold text-foreground tracking-tight">
-              Arbiter Trace
-            </h1>
-          </div>
-        </div>
+    <>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodeClick={onNodeClick}
+        nodesDraggable
+        fitView
+        fitViewOptions={{ padding: 0.2 }}
+        proOptions={{ hideAttribution: true }}
+        className="bg-background"
+      >
+        <Background gap={24} size={1} color="hsl(var(--border))" />
+        <Controls className="!bg-card !border !border-border !shadow-card" />
+        <MiniMap
+          className="!bg-card !border !border-border"
+          nodeColor={() => "#2D9E8F"}
+          maskColor="hsl(var(--muted) / 0.6)"
+        />
+      </ReactFlow>
 
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-              placeholder="Enter ticker (e.g. AAPL)"
-              className="h-9 w-56 rounded-md border border-input bg-background pl-9 pr-3 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <button
-            onClick={handleAnalyze}
-            className="h-9 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            Analyze
-          </button>
-        </div>
-      </header>
-
-      {activeTicker ? (
-        <ReasoningGraph key={runKey} ticker={activeTicker} running={running} />
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Search size={28} className="text-primary" />
-            </div>
-            <p className="text-lg font-medium text-foreground mb-1">Enter a ticker to begin</p>
-            <p className="text-sm text-muted-foreground">
-              Type a stock symbol above and click Analyze to trace the reasoning graph
-            </p>
-          </div>
+      {running && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border shadow-card font-mono text-xs">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+          <span className="text-muted-foreground">Reasoning</span>
+          <span className="text-primary">{ticker.toUpperCase()}</span>
         </div>
       )}
 
-      <footer className="px-6 py-3 border-t border-border text-center">
-        <p className="text-xs text-muted-foreground">
-          Built as a concept inspired by Alka Arbiter
+      <NodeDetailPanel step={selected} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+const Demo = () => {
+  const [input, setInput] = useState("AAPL");
+  const [ticker, setTicker] = useState("AAPL");
+
+  const handleAnalyze = (e: React.FormEvent) => {
+    e.preventDefault();
+    const t = input.trim().toUpperCase();
+    if (t) setTicker(t);
+  };
+
+  return (
+    <div className="h-screen w-screen flex flex-col bg-background">
+      <header className="flex-none border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="flex items-center gap-4 px-4 sm:px-6 py-3">
+          <Link to="/" className="flex items-center gap-2 group">
+            <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-display font-bold">
+              A
+            </div>
+            <div className="hidden sm:block">
+              <div className="font-display font-semibold text-sm leading-none">Arbiter Trace</div>
+              <div className="font-mono text-[10px] text-muted-foreground mt-0.5">REASONING GRAPH · DEMO</div>
+            </div>
+          </Link>
+
+          <div className="flex-1" />
+
+          <form onSubmit={handleAnalyze} className="flex items-center gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value.toUpperCase())}
+              placeholder="Ticker (e.g. AAPL)"
+              maxLength={6}
+              className="w-32 sm:w-44 font-mono uppercase tracking-wider"
+            />
+            <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Analyze</span>
+            </Button>
+          </form>
+
+          <Link to="/" className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Home
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-1 relative">
+        <ReactFlowProvider>
+          <DemoCanvas ticker={ticker} />
+        </ReactFlowProvider>
+      </main>
+
+      <footer className="flex-none border-t border-border bg-card px-4 sm:px-6 py-3 text-center">
+        <p className="font-mono text-[10px] tracking-wider text-muted-foreground">
+          BUILT AS A CONCEPT INSPIRED BY ALKA ARBITER
         </p>
       </footer>
     </div>

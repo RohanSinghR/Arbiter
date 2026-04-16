@@ -1,80 +1,16 @@
-import { useState, useCallback } from "react";
-import { Search } from "lucide-react";
-import ReasoningGraph from "@/components/graph/ReasoningGraph";
+// Update this page (the content is just a fallback if you fail to update the page)
 
-const Index = () => {
-  const [ticker, setTicker] = useState("");
-  const [activeTicker, setActiveTicker] = useState("");
-  const [running, setRunning] = useState(false);
-  const [runKey, setRunKey] = useState(0);
-
-  const handleAnalyze = useCallback(() => {
-    const t = ticker.trim().toUpperCase();
-    if (!t) return;
-    setActiveTicker(t);
-    setRunning(true);
-    setRunKey((k) => k + 1);
-  }, [ticker]);
-
+// IMPORTANT: Fully REPLACE this with your own code
+const PlaceholderIndex = () => {
+  // PLACEHOLDER: Replace this entire return statement with the user's app.
+  // The inline background color is intentionally not part of the design system.
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-xs font-bold">AT</span>
-          </div>
-          <h1 className="text-lg font-semibold text-foreground tracking-tight">
-            Arbiter Trace
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-              placeholder="Enter ticker (e.g. AAPL)"
-              className="h-9 w-56 rounded-md border border-input bg-background pl-9 pr-3 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <button
-            onClick={handleAnalyze}
-            className="h-9 px-5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            Analyze
-          </button>
-        </div>
-      </header>
-
-      {/* Canvas */}
-      {activeTicker ? (
-        <ReasoningGraph key={runKey} ticker={activeTicker} running={running} />
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Search size={28} className="text-primary" />
-            </div>
-            <p className="text-lg font-medium text-foreground mb-1">Enter a ticker to begin</p>
-            <p className="text-sm text-muted-foreground">
-              Type a stock symbol above and click Analyze to trace the reasoning graph
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <footer className="px-6 py-3 border-t border-border text-center">
-        <p className="text-xs text-muted-foreground">
-          Built as a concept inspired by Alka Arbiter
-        </p>
-      </footer>
+    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
+      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
     </div>
   );
 };
+
+const Index = PlaceholderIndex;
 
 export default Index;

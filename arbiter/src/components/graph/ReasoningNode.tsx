@@ -1,53 +1,89 @@
-import { memo } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { ReasoningStep } from "@/data/reasoningSteps";
-import SparklineChart from "./SparklineChart";
-import BarChart from "./BarChart";
+import { Handle, Position, NodeProps } from "@xyflow/react";
+import { Sparkline } from "../viz/Sparkline";
+import { MiniBarChart } from "../viz/MiniBarChart";
+import { ReasoningStep } from "@/lib/reasoning-data";
+import { Database, LineChart, Scale, Zap, Target } from "lucide-react";
 
-const typeIcons: Record<ReasoningStep["type"], string> = {
-  ingest: "📄",
-  analyze: "📊",
-  check: "⚖️",
-  signal: "📡",
-  mandate: "✅",
+const iconFor: Record<string, React.ComponentType<{ className?: string }>> = {
+  ingest: Database,
+  analyze: LineChart,
+  check: Scale,
+  signal: Zap,
+  mandate: Target,
 };
 
-const ReasoningNode = ({ data }: NodeProps) => {
-  const step = data.step as ReasoningStep;
-  const isMandate = step.type === "mandate";
+interface Data extends Record<string, unknown> {
+  step: ReasoningStep;
+  highlightTicker?: string;
+}
+
+export const ReasoningNode = ({ data, selected }: NodeProps) => {
+  const { step, highlightTicker } = data as Data;
+  const Icon = iconFor[step.kind];
+  const isMandate = step.kind === "mandate";
 
   return (
     <div
-      className={`
-        w-[280px] rounded-lg border bg-card px-4 py-3 shadow-sm transition-shadow hover:shadow-md cursor-pointer
-        ${isMandate ? "border-2 border-node-mandate-border node-pulse" : "border-node-border"}
-      `}
+      className={[
+        "group bg-card rounded-xl shadow-node transition-all duration-300 cursor-pointer",
+        "min-w-[260px] max-w-[300px]",
+        isMandate
+          ? "border-2 border-primary shadow-glow"
+          : "border border-border hover:border-primary/40",
+        selected ? "ring-2 ring-primary/50 ring-offset-2 ring-offset-background" : "",
+      ].join(" ")}
     >
-      <Handle type="target" position={Position.Top} className="!bg-primary !w-2 !h-2 !border-0" />
+      <Handle type="target" position={Position.Left} className="!bg-primary" />
 
-      <div className="flex items-start gap-2">
-        <span className="text-base mt-0.5">{typeIcons[step.type]}</span>
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm leading-snug ${isMandate ? "font-bold text-primary" : "font-medium text-foreground"}`}>
+      <div className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div
+            className={[
+              "h-7 w-7 rounded-md flex items-center justify-center",
+              isMandate ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
+            ].join(" ")}
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+          <span className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground">
             {step.label}
-          </p>
-
-          {step.chartType === "sparkline" && (
-            <div className="mt-2">
-              <SparklineChart />
-            </div>
-          )}
-          {step.chartType === "bar" && (
-            <div className="mt-2">
-              <BarChart />
-            </div>
-          )}
+          </span>
         </div>
+
+        <h3
+          className={[
+            "font-display font-semibold leading-tight mb-1",
+            isMandate ? "text-base text-primary" : "text-sm text-foreground",
+          ].join(" ")}
+        >
+          {step.title}
+        </h3>
+        <p className="text-xs text-muted-foreground leading-snug">{step.summary}</p>
+
+        {step.sparkline && (
+          <div className="mt-3 -mx-1">
+            <Sparkline data={step.sparkline} width={240} height={44} />
+            <div className="flex justify-between font-mono text-[9px] text-muted-foreground mt-1 px-1">
+              <span>Q1·22</span>
+              <span className="text-primary">+6.1% YoY</span>
+              <span>Q4·24</span>
+            </div>
+          </div>
+        )}
+
+        {step.bars && (
+          <div className="mt-3">
+            <MiniBarChart
+              data={step.bars}
+              width={240}
+              height={84}
+              highlightLabel={highlightTicker}
+            />
+          </div>
+        )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="!bg-primary !w-2 !h-2 !border-0" />
+      <Handle type="source" position={Position.Right} className="!bg-primary" />
     </div>
   );
 };
-
-export default memo(ReasoningNode);

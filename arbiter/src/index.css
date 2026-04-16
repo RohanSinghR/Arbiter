@@ -2,11 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Arbiter Trace — Fintech Reasoning Visualizer Design System */
 
 @layer base {
   :root {
-    --background: 40 20% 97%;
+    /* Cream / off-white fintech palette (used on /demo) */
+    --background: 40 33% 97%;
     --foreground: 220 25% 12%;
 
     --card: 0 0% 100%;
@@ -15,47 +16,72 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 12%;
 
-    --primary: 170 55% 40%;
-    --primary-foreground: 0 0% 100%;
+    /* Brand teal #2D9E8F => hsl(173 56% 39%) */
+    --primary: 173 56% 39%;
+    --primary-foreground: 40 33% 97%;
+    --primary-glow: 173 56% 55%;
 
-    --secondary: 40 15% 93%;
+    --secondary: 40 20% 92%;
     --secondary-foreground: 220 25% 12%;
 
-    --muted: 40 10% 94%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 40 18% 90%;
+    --muted-foreground: 220 12% 40%;
 
-    --accent: 170 55% 40%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 173 56% 39%;
+    --accent-foreground: 40 33% 97%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive-foreground: 40 33% 97%;
 
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 170 55% 40%;
+    --border: 40 15% 85%;
+    --input: 40 15% 85%;
+    --ring: 173 56% 39%;
 
-    --radius: 0.625rem;
+    --radius: 0.75rem;
+
+    /* Landing dark surface */
+    --night: 0 0% 4%;
+    --night-foreground: 40 33% 97%;
+    --night-muted: 0 0% 70%;
+    --night-border: 173 30% 20%;
+
+    /* Gradients & shadows */
+    --gradient-teal: linear-gradient(135deg, hsl(173 56% 39%), hsl(173 70% 50%));
+    --gradient-night: radial-gradient(ellipse at top, hsl(173 40% 12%) 0%, hsl(0 0% 4%) 60%);
+    --shadow-glow: 0 0 60px hsl(173 56% 39% / 0.35);
+    --shadow-card: 0 1px 3px hsl(220 25% 12% / 0.06), 0 8px 24px hsl(220 25% 12% / 0.04);
+    --shadow-node: 0 2px 6px hsl(220 25% 12% / 0.08), 0 12px 32px hsl(220 25% 12% / 0.06);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 170 55% 40%;
+    --sidebar-primary: 240 5.9% 10%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 170 55% 40%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
 
-    /* Custom tokens */
-    --surface: 0 0% 100%;
-    --surface-elevated: 0 0% 100%;
-    --node-bg: 0 0% 100%;
-    --node-border: 220 15% 88%;
-    --node-mandate-border: 170 55% 40%;
-    --edge-color: 170 55% 40%;
-    --panel-bg: 0 0% 100%;
-
-    --font-sans: 'DM Sans', system-ui, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 40 33% 97%;
+    --card: 0 0% 7%;
+    --card-foreground: 40 33% 97%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 40 33% 97%;
+    --primary: 173 56% 45%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 40 33% 97%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 173 56% 45%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 40 33% 97%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 173 56% 45%;
   }
 }
 
@@ -65,72 +91,51 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
-    font-family: var(--font-sans);
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  .font-mono-tight {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: -0.01em;
+  }
+
+  .text-glow-teal {
+    text-shadow: 0 0 24px hsl(173 56% 45% / 0.6);
+  }
+
+  .bg-night {
+    background: hsl(var(--night));
+  }
+
+  .bg-night-gradient {
+    background: var(--gradient-night);
   }
 }
 
 /* ReactFlow overrides */
-.react-flow__node {
-  font-family: var(--font-sans) !important;
-}
-
 .react-flow__attribution {
   display: none !important;
 }
 
-@keyframes edge-dash {
-  to {
-    stroke-dashoffset: -20;
-  }
+.react-flow__edge-path {
+  stroke-width: 2;
 }
 
-.animated-edge {
-  stroke-dasharray: 5 5;
-  animation: edge-dash 0.6s linear infinite;
-}
-
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 hsl(170 55% 40% / 0.3);
-  }
-
-  70% {
-    box-shadow: 0 0 0 8px hsl(170 55% 40% / 0);
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 hsl(170 55% 40% / 0);
-  }
-}
-
-.node-pulse {
-  animation: pulse-ring 2s ease-out infinite;
-}
-
-/* Landing page animations */
-@keyframes float-y {
-  0% {
-    transform: translateY(0px);
-  }
-
-  100% {
-    transform: translateY(-40px);
-  }
-}
-
-@keyframes cta-breathe {
-
-  0%,
-  100% {
-    box-shadow: 0 0 30px rgba(45, 158, 143, 0.25);
-  }
-
-  50% {
-    box-shadow: 0 0 50px rgba(45, 158, 143, 0.45);
-  }
-}
-
-.cta-breathe {
-  animation: cta-breathe 3s ease-in-out infinite;
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
 }
