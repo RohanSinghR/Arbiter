@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -31,9 +31,26 @@ function DemoCanvas({ ticker }: { ticker: string }) {
   const [selected, setSelected] = useState<ReasoningStep | null>(null);
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState(false);
+  const [steps, setSteps] = useState<ReasoningStep[]>([]);
+  const [loading, setLoading] = useState(false);
   const { fitView } = useReactFlow();
 
-  const steps = useMemo(() => buildSteps(ticker), [ticker]);
+  useEffect(() => {
+    const fetchSteps = async () => {
+      setLoading(true);
+      setNodes([]);
+      setEdges([]);
+      try {
+        const result = await buildSteps(ticker);
+        setSteps(result);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSteps();
+  }, [ticker]);
 
   const run = useCallback(() => {
     setNodes([]);
@@ -71,9 +88,8 @@ function DemoCanvas({ ticker }: { ticker: string }) {
   }, [steps, ticker, fitView]);
 
   useEffect(() => {
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker]);
+    if (steps.length > 0) run();
+  }, [steps]);
 
   const onNodeClick: NodeMouseHandler = (_, node) => {
     const data = node.data as { step: ReasoningStep };
@@ -103,10 +119,10 @@ function DemoCanvas({ ticker }: { ticker: string }) {
         />
       </ReactFlow>
 
-      {running && (
+      {(running || loading) && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border shadow-card font-mono text-xs">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-          <span className="text-muted-foreground">Reasoning</span>
+          <span className="text-muted-foreground">{loading ? "Fetching" : "Reasoning"}</span>
           <span className="text-primary">{ticker.toUpperCase()}</span>
         </div>
       )}
