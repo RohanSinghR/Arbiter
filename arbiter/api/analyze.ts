@@ -108,8 +108,8 @@ function normalizeNode(n: Partial<RawNode>, i: number): RawNode {
 function normalizeEdge(e: Partial<RawEdge>): RawEdge | null {
     if (typeof e.source !== "string" || typeof e.target !== "string") return null;
     return {
-        source: e.source.trim(),
-        target: e.target.trim(),
+        source: e.source.trim().toLowerCase(),
+        target: e.target.trim().toLowerCase(),
         weight:
             typeof e.weight === "number" && isFinite(e.weight)
                 ? Math.max(0, Math.min(1, e.weight))
