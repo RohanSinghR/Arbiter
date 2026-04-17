@@ -1,4 +1,11 @@
-export type NodeKind = "ingest" | "analyze" | "check" | "signal" | "mandate";
+export type NodeKind =
+  | "data_ingest"
+  | "fundamental"
+  | "risk"
+  | "catalyst"
+  | "valuation"
+  | "synthesis"
+  | "mandate";
 
 export interface ChartBar {
   label: string;
@@ -12,6 +19,7 @@ export interface ReasoningNode {
   description: string;
   evidence: string;
   value?: string;
+  signal?: "bullish" | "bearish" | "neutral";
   sparkline?: number[];
   bars?: ChartBar[];
 }
@@ -26,13 +34,19 @@ export interface ReasoningEdge {
 export interface ReasoningGraph {
   nodes: ReasoningNode[];
   edges: ReasoningEdge[];
+  signal: "BUY" | "SELL" | "HOLD";
+  confidence: number;
+  mandate_thesis: string;
 }
 
-export async function buildGraph(ticker: string): Promise<ReasoningGraph> {
+export async function buildGraph(
+  ticker: string,
+  thesis?: string
+): Promise<ReasoningGraph> {
   const res = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ticker }),
+    body: JSON.stringify({ ticker, thesis }),
   });
 
   if (!res.ok) throw new Error(`analyze API error: ${res.status}`);
