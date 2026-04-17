@@ -58,15 +58,11 @@ function isValidKind(v: unknown): v is NodeKind {
     return VALID_KINDS.includes(v as NodeKind);
 }
 
-function normalizeId(value: string): string {
-    return value.trim().toLowerCase().replace(/\s+/g, "_");
-}
-
 function normalizeNode(n: Partial<RawNode>, i: number): RawNode {
     const node: RawNode = {
         id:
             typeof n.id === "string" && n.id.trim()
-                ? normalizeId(n.id)
+                ? n.id.trim().toLowerCase().replace(/\s+/g, "_")
                 : `node_${i + 1}`,
         type: isValidKind(n.type) ? n.type : "fundamental",
         title:
@@ -111,10 +107,9 @@ function normalizeNode(n: Partial<RawNode>, i: number): RawNode {
 
 function normalizeEdge(e: Partial<RawEdge>): RawEdge | null {
     if (typeof e.source !== "string" || typeof e.target !== "string") return null;
-
     return {
-        source: normalizeId(e.source),
-        target: normalizeId(e.target),
+        source: e.source.trim(),
+        target: e.target.trim(),
         weight:
             typeof e.weight === "number" && isFinite(e.weight)
                 ? Math.max(0, Math.min(1, e.weight))

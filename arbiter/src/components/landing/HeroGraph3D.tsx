@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -129,7 +129,7 @@ function Edges({ nodes, edges }: { nodes: NodeDef[]; edges: [number, number][] }
 
 function Scene() {
     const groupRef = useRef<THREE.Group>(null);
-    const { mouse } = useThree();
+    const { mouse, clock } = useThree();
     const targetRot = useRef(new THREE.Vector2(0, 0));
 
     const { nodes, edges } = useMemo(() => buildGraph(32), []);
@@ -143,6 +143,17 @@ function Scene() {
         groupRef.current.rotation.y += (targetRot.current.y - groupRef.current.rotation.y) * 0.002;
     });
 
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === "visible") {
+                clock.start(); // resets elapsed time
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibility);
+        return () => document.removeEventListener("visibilitychange", handleVisibility);
+    }, [clock]);
+
+    // rest of your code stays exactly the same
     return (
         <group ref={groupRef}>
             <Edges nodes={nodes} edges={edges} />

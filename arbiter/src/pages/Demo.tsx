@@ -718,6 +718,9 @@ function DemoCanvas({ ticker, thesis, onReset, onMeta }: DemoCanvasProps) {
 
       const graph = await buildGraph(ticker, thesis);
 
+      console.log("nodes:", graph.nodes.map(n => n.id));
+      console.log("edges:", graph.edges.map(e => `${e.source} → ${e.target}`));
+
       // Surface company meta into sidebar
       if (graph.meta) {
         setTickerMeta(graph.meta);
