@@ -22,8 +22,9 @@ import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 
 const nodeTypes = { reasoning: ReasoningNode };
 
-const NODE_X_GAP = 360;
-const NODE_Y = 160;
+const NODE_X = 220;
+const START_Y = 60;
+const NODE_Y_GAP = 240;
 
 function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -71,7 +72,10 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
         const newNode: Node = {
           id: step.id,
           type: "reasoning",
-          position: { x: 60 + i * NODE_X_GAP, y: NODE_Y },
+          position: {
+            x: NODE_X,
+            y: START_Y + i * NODE_Y_GAP,
+          },
           data: { step, highlightTicker: ticker.toUpperCase() },
           draggable: true,
         };
@@ -145,7 +149,7 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border shadow-card font-mono text-xs">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
           <span className="text-muted-foreground">
-            {loading ? "Fetching" : "Reasoning"}
+            {loading ? "Fetching trace" : "Building trace"}
           </span>
           <span className="text-primary">
             {ticker.toUpperCase()} · {depth} nodes
@@ -161,7 +165,6 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
 const Demo = () => {
   const [input, setInput] = useState("AAPL");
   const [ticker, setTicker] = useState("AAPL");
-
   const [depth, setDepth] = useState(5);
   const [appliedDepth, setAppliedDepth] = useState(5);
 
@@ -191,7 +194,7 @@ const Demo = () => {
                 Arbiter Trace
               </div>
               <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
-                REASONING GRAPH · DEMO
+                AUDITABLE REASONING PIPELINE
               </div>
             </div>
           </Link>
