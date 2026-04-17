@@ -1,5 +1,11 @@
-import { ReasoningStep } from "@/lib/reasoning-data";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { ReasoningNode } from "@/lib/reasoning-data";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Database, LineChart, Scale, Zap, Target } from "lucide-react";
 
@@ -11,19 +17,27 @@ const iconFor: Record<string, React.ComponentType<{ className?: string }>> = {
   mandate: Target,
 };
 
+const kindLabel: Record<string, string> = {
+  ingest: "INGEST",
+  analyze: "ANALYZE",
+  check: "CHECK",
+  signal: "SIGNAL",
+  mandate: "MANDATE",
+};
+
 interface Props {
-  step: ReasoningStep | null;
+  node: ReasoningNode | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const NodeDetailPanel = ({ step, open, onOpenChange }: Props) => {
-  const Icon = step ? iconFor[step.type] : Database;
+export const NodeDetailPanel = ({ node, open, onOpenChange }: Props) => {
+  const Icon = node ? (iconFor[node.type] ?? Database) : Database;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-        {step && (
+        {node && (
           <>
             <SheetHeader className="text-left space-y-3">
               <div className="flex items-center gap-2">
@@ -32,27 +46,27 @@ export const NodeDetailPanel = ({ step, open, onOpenChange }: Props) => {
                 </div>
                 <Badge
                   variant="outline"
-                  className="font-mono text-[10px] tracking-widest border-primary/30 text-primary uppercase"
+                  className="font-mono text-[10px] tracking-widest border-primary/30 text-primary"
                 >
-                  {step.id}
+                  {kindLabel[node.type]}
                 </Badge>
               </div>
               <SheetTitle className="font-display text-2xl leading-tight">
-                {step.title}
+                {node.title}
               </SheetTitle>
               <SheetDescription className="text-sm">
-                {step.description}
+                {node.description}
               </SheetDescription>
             </SheetHeader>
 
             <div className="mt-6 space-y-6">
-              {step.value && (
+              {node.value && (
                 <section>
                   <h4 className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground mb-2">
                     METRIC
                   </h4>
                   <span className="font-mono text-2xl font-semibold text-primary">
-                    {step.value}
+                    {node.value}
                   </span>
                 </section>
               )}
@@ -63,7 +77,7 @@ export const NodeDetailPanel = ({ step, open, onOpenChange }: Props) => {
                 </h4>
                 <div className="rounded-lg border border-border bg-card p-4">
                   <p className="text-sm leading-relaxed text-foreground/90">
-                    {step.evidence}
+                    {node.evidence}
                   </p>
                 </div>
               </section>
@@ -73,7 +87,7 @@ export const NodeDetailPanel = ({ step, open, onOpenChange }: Props) => {
                   TRACE ID
                 </div>
                 <div className="font-mono text-xs break-all text-foreground/80">
-                  arb_{step.id}_{Math.random().toString(36).slice(2, 10)}
+                  arb::{node.id}::{Date.now().toString(36)}
                 </div>
               </section>
             </div>

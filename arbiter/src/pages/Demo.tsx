@@ -12,124 +12,125 @@ import {
   ReactFlowProvider,
   useReactFlow,
   MarkerType,
+  Panel,
 } from "@xyflow/react";
+import dagre from "@dagrejs/dagre";
 import "@xyflow/react/dist/style.css";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ReasoningNode } from "@/components/graph/ReasoningNode";
+import { ReasoningNodeComponent } from "@/components/graph/ReasoningNode";
 import { NodeDetailPanel } from "@/components/graph/NodeDetailPanel";
-import { buildSteps, ReasoningStep } from "@/lib/reasoning-data";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { buildGraph, ReasoningNode, ReasoningEdge } from "@/lib/reasoning-data";
+import { ArrowLeft, Loader2, Sparkles, RefreshCw } from "lucide-react";
 
-const nodeTypes = { reasoning: ReasoningNode };
+const nodeTypes = { reasoning: ReasoningNodeComponent };
 
-const NODE_X = 220;
-const START_Y = 60;
-const NODE_Y_GAP = 240;
+// Node dimensions fed to dagre so it can compute non-overlapping layout
+const NODE_WIDTH = 272;
+const NODE_HEIGHT = 160; // conservative estimate; dagre just needs spacing
 
-function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
+function layoutGraph(
+  rnodes: ReasoningNode[],
+  redges: ReasoningEdge[]
+): { nodes: Node[]; edges: Edge[] } {
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 80, marginx: 40, marginy: 40 });
+
+  rnodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+  redges.forEach((e) => g.setEdge(e.source, e.target));
+
+  dagre.layout(g);
+
+  const nodes: Node[] = rnodes.map((n) => {
+    const pos = g.node(n.id);
+    return {
+      id: n.id,
+      type: "reasoning",
+      position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 },
+      data: { node: n },
+      draggable: true,
+    };
+  });
+
+  const edges: Edge[] = redges.map((e) => ({
+    id: `e-${e.source}-${e.target}`,
+    source: e.source,
+    target: e.target,
+    animated: e.target === "mandate" || e.target === "signal",
+    label: e.label,
+    labelStyle: { fontSize: 9, fontFamily: "monospace", fill: "hsl(var(--muted-foreground))" },
+    labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.85 },
+    style: {
+      stroke: `hsl(var(--primary) / ${0.3 + e.weight * 0.7})`,
+      strokeWidth: 1 + e.weight * 2.5, // thin=low weight, thick=high weight
+    },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: "hsl(var(--primary))",
+      width: 16,
+      height: 16,
+    },
+  }));
+
+  return { nodes, edges };
+}
+
+function DemoCanvas({ ticker }: { ticker: string }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [selected, setSelected] = useState<ReasoningStep | null>(null);
-  const [open, setOpen] = useState(false);
-  const [running, setRunning] = useState(false);
-  const [steps, setSteps] = useState<ReasoningStep[]>([]);
+  const [selectedNode, setSelectedNode] = useState<ReasoningNode | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { fitView } = useReactFlow();
 
-  // Wire up applyNodeChanges so drag positions are committed back to state
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
     []
   );
 
-  useEffect(() => {
-    const fetchSteps = async () => {
-      setLoading(true);
-      setRunning(false);
-      setNodes([]);
-      setEdges([]);
-      setSelected(null);
-      setOpen(false);
-
-      try {
-        const result = await buildSteps(ticker, depth);
-        setSteps(result);
-      } catch (err) {
-        console.error(err);
-        setSteps([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSteps();
-  }, [ticker, depth]);
-
-  const run = useCallback(() => {
-    if (!steps.length) return;
-
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     setNodes([]);
     setEdges([]);
-    setRunning(true);
+    setPanelOpen(false);
 
-    steps.forEach((step, i) => {
-      setTimeout(() => {
-        const newNode: Node = {
-          id: step.id,
-          type: "reasoning",
-          position: {
-            x: NODE_X,
-            y: START_Y + i * NODE_Y_GAP,
-          },
-          data: { step, highlightTicker: ticker.toUpperCase() },
-          draggable: true,
-        };
+    try {
+      const graph = await buildGraph(ticker);
+      const { nodes: lNodes, edges: lEdges } = layoutGraph(graph.nodes, graph.edges);
 
-        setNodes((nds) => [...nds, newNode]);
-
-        if (i > 0) {
-          const prevStep = steps[i - 1];
-
-          const newEdge: Edge = {
-            id: `e-${prevStep.id}-${step.id}`,
-            source: prevStep.id,
-            target: step.id,
-            animated: true,
-            style: { stroke: "#2D9E8F", strokeWidth: 2 },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: "#2D9E8F",
-            },
-          };
-
-          setEdges((eds) => [...eds, newEdge]);
-        }
-
+      // Animate nodes in sequentially by dagre rank (top to bottom)
+      lNodes.forEach((node, i) => {
         setTimeout(() => {
-          fitView({ padding: 0.2, duration: 600 });
-        }, 50);
+          setNodes((prev) => [...prev, node]);
+          if (i === lNodes.length - 1) {
+            setTimeout(() => fitView({ padding: 0.15, duration: 600 }), 50);
+          }
+        }, i * 120);
+      });
 
-        if (i === steps.length - 1) {
-          setRunning(false);
-        }
-      }, i * 700);
-    });
-  }, [steps, ticker, fitView]);
+      // Edges appear after all nodes
+      setTimeout(() => setEdges(lEdges), lNodes.length * 120 + 100);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to build reasoning graph. Check your API key.");
+    } finally {
+      setLoading(false);
+    }
+  }, [ticker, fitView]);
 
   useEffect(() => {
-    if (steps.length > 0) {
-      run();
-    }
-  }, [steps, run]);
+    load();
+  }, [load]);
 
-  const onNodeClick: NodeMouseHandler = (_, node) => {
-    const data = node.data as { step: ReasoningStep };
-    setSelected(data.step);
-    setOpen(true);
+  const onNodeClick: NodeMouseHandler = (_, rfNode) => {
+    const rnode = (rfNode.data as { node: ReasoningNode }).node;
+    setSelectedNode(rnode);
+    setPanelOpen(true);
   };
 
   return (
@@ -142,32 +143,35 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
         onNodeClick={onNodeClick}
         nodesDraggable={true}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.15 }}
         proOptions={{ hideAttribution: true }}
         className="bg-background"
       >
-        <Background gap={24} size={1} color="hsl(var(--border))" />
-        <Controls className="!bg-card !border !border-border !shadow-card" />
+        <Background gap={20} size={1} color="hsl(var(--border))" />
+        <Controls className="!bg-card !border !border-border" />
         <MiniMap
           className="!bg-card !border !border-border"
-          nodeColor={() => "#2D9E8F"}
-          maskColor="hsl(var(--muted) / 0.6)"
+          nodeColor={() => "hsl(var(--primary))"}
+          maskColor="hsl(var(--muted) / 0.5)"
         />
+
+        <Panel position="top-center">
+          {loading && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border shadow-sm font-mono text-xs">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              <span className="text-muted-foreground">Building reasoning graph</span>
+              <span className="text-primary font-medium">{ticker}</span>
+            </div>
+          )}
+          {error && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-destructive/10 border border-destructive/30 font-mono text-xs text-destructive">
+              {error}
+            </div>
+          )}
+        </Panel>
       </ReactFlow>
 
-      {(running || loading) && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border shadow-card font-mono text-xs">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-          <span className="text-muted-foreground">
-            {loading ? "Fetching trace" : "Building trace"}
-          </span>
-          <span className="text-primary">
-            {ticker.toUpperCase()} · {depth} nodes
-          </span>
-        </div>
-      )}
-
-      <NodeDetailPanel step={selected} open={open} onOpenChange={setOpen} />
+      <NodeDetailPanel node={selectedNode} open={panelOpen} onOpenChange={setPanelOpen} />
     </>
   );
 }
@@ -175,34 +179,23 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
 const Demo = () => {
   const [input, setInput] = useState("AAPL");
   const [ticker, setTicker] = useState("AAPL");
-  const [depth, setDepth] = useState(5);
-  const [appliedDepth, setAppliedDepth] = useState(5);
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-
-    const trimmedTicker = input.trim().toUpperCase();
-    const normalizedDepth = Math.max(3, Math.min(8, depth || 5));
-
-    if (trimmedTicker) {
-      setTicker(trimmedTicker);
-      setAppliedDepth(normalizedDepth);
-    }
+    const t = input.trim().toUpperCase();
+    if (t) setTicker(t);
   };
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background">
       <header className="flex-none border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="flex items-center gap-4 px-4 sm:px-6 py-3">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-display font-bold">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
               A
             </div>
-
             <div className="hidden sm:block">
-              <div className="font-display font-semibold text-sm leading-none">
-                Arbiter Trace
-              </div>
+              <div className="font-semibold text-sm leading-none">Arbiter Trace</div>
               <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
                 AUDITABLE REASONING PIPELINE
               </div>
@@ -217,27 +210,10 @@ const Demo = () => {
               onChange={(e) => setInput(e.target.value.toUpperCase())}
               placeholder="Ticker (e.g. AAPL)"
               maxLength={8}
-              className="w-32 sm:w-44 font-mono uppercase tracking-wider"
+              className="w-32 sm:w-40 font-mono uppercase tracking-wider"
             />
-
-            <Input
-              type="number"
-              min={3}
-              max={8}
-              value={depth}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                setDepth(Number.isFinite(value) ? value : 5);
-              }}
-              placeholder="Nodes"
-              className="w-20 font-mono"
-            />
-
-            <Button
-              type="submit"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
-            >
-              <Sparkles className="h-4 w-4" />
+            <Button type="submit" className="gap-2">
+              <Sparkles className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Analyze</span>
             </Button>
           </form>
@@ -254,11 +230,11 @@ const Demo = () => {
 
       <main className="flex-1 relative">
         <ReactFlowProvider>
-          <DemoCanvas ticker={ticker} depth={appliedDepth} />
+          <DemoCanvas ticker={ticker} />
         </ReactFlowProvider>
       </main>
 
-      <footer className="flex-none border-t border-border bg-card px-4 sm:px-6 py-3 text-center">
+      <footer className="flex-none border-t border-border bg-card px-6 py-3 text-center">
         <p className="font-mono text-[10px] tracking-wider text-muted-foreground">
           BUILT AS A CONCEPT INSPIRED BY ALKA ARBITER
         </p>
