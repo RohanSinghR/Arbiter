@@ -4,8 +4,10 @@ import {
   Background,
   Controls,
   MiniMap,
+  applyNodeChanges,
   type Node,
   type Edge,
+  type NodeChange,
   type NodeMouseHandler,
   ReactFlowProvider,
   useReactFlow,
@@ -36,6 +38,13 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
   const [loading, setLoading] = useState(false);
 
   const { fitView } = useReactFlow();
+
+  // Wire up applyNodeChanges so drag positions are committed back to state
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) =>
+      setNodes((nds) => applyNodeChanges(changes, nds)),
+    []
+  );
 
   useEffect(() => {
     const fetchSteps = async () => {
@@ -129,6 +138,7 @@ function DemoCanvas({ ticker, depth }: { ticker: string; depth: number }) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
         onNodeClick={onNodeClick}
         nodesDraggable={true}
         fitView

@@ -1,55 +1,37 @@
 export type StepKind = "ingest" | "analyze" | "check" | "signal" | "mandate";
 
-export interface ReasoningStep {
-  id: string;
-  kind: StepKind;
+export interface ChartBar {
   label: string;
-  title: string;
-  summary: string;
-  evidence: { label: string; value: string }[];
-  narrative: string;
-  sparkline?: number[];
-  bars?: { label: string; value: number }[];
+  value: number;
 }
 
-interface ApiStep {
+export interface ReasoningStep {
   id: string;
+  type: StepKind;
   title: string;
   description: string;
-  type: StepKind;
   evidence: string;
   value?: string;
   sparkline?: number[];
-  bars?: { label: string; value: number }[];
+  bars?: ChartBar[];
 }
 
-export const buildSteps = async (ticker: string, depth: number): Promise<ReasoningStep[]> => {
-  const T = ticker.toUpperCase();
-
+export async function buildSteps(ticker: string, depth: number): Promise<ReasoningStep[]> {
   const res = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ticker: T, depth }),
+    body: JSON.stringify({ ticker, depth }),
   });
 
   if (!res.ok) {
-    throw new Error("Failed to fetch reasoning steps");
+    throw new Error(`analyze API error: ${res.status}`);
   }
 
-  const { steps } = (await res.json()) as { steps: ApiStep[] };
+  const data = await res.json();
 
-  return steps.map((s, i): ReasoningStep => ({
-    id: s.id ?? `n${i + 1}`,
-    kind: s.type,
-    label: s.type.toUpperCase(),
-    title: s.title,
-    summary: s.description,
-    narrative: s.evidence,
-    evidence: [
-      { label: "Detail", value: s.evidence },
-      ...(s.value ? [{ label: "Metric", value: s.value }] : []),
-    ],
-    sparkline: Array.isArray(s.sparkline) ? s.sparkline : undefined,
-    bars: Array.isArray(s.bars) ? s.bars : undefined,
-  }));
-};
+  if (!Array.isArray(data.steps)) {
+    throw new Error("Unexpected response shape from /api/analyze");
+  }
+
+  return data.steps as ReasoningStep[];
+}

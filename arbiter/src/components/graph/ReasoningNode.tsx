@@ -19,8 +19,8 @@ interface Data extends Record<string, unknown> {
 
 export const ReasoningNode = ({ data, selected }: NodeProps) => {
   const { step, highlightTicker } = data as Data;
-  const Icon = iconFor[step.kind];
-  const isMandate = step.kind === "mandate";
+  const Icon = iconFor[step.type];
+  const isMandate = step.type === "mandate";
 
   return (
     <div
@@ -45,8 +45,8 @@ export const ReasoningNode = ({ data, selected }: NodeProps) => {
           >
             <Icon className="h-3.5 w-3.5" />
           </div>
-          <span className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground">
-            {step.label}
+          <span className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground uppercase">
+            {step.id}
           </span>
         </div>
 
@@ -58,7 +58,13 @@ export const ReasoningNode = ({ data, selected }: NodeProps) => {
         >
           {step.title}
         </h3>
-        <p className="text-xs text-muted-foreground leading-snug">{step.summary}</p>
+        <p className="text-xs text-muted-foreground leading-snug">{step.description}</p>
+
+        {step.value && (
+          <div className="mt-2">
+            <span className="font-mono text-xs font-semibold text-primary">{step.value}</span>
+          </div>
+        )}
 
         {step.sparkline && (
           <div className="mt-3 -mx-1">
