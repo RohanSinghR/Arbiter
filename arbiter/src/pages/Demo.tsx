@@ -338,35 +338,105 @@ interface InterstitialProps {
 
 function Interstitial({ ticker, thesis, error, onRetry }: InterstitialProps) {
   const [stepIndex, setStepIndex] = useState(0);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
-    if (error) return;
+    if (error) {
+      // Keep stepIndex at 0 so the validation step shows as failed
+      setStepIndex(0);
+      // Auto-redirect back to preflight after 3s
+      const t = setTimeout(() => {
+        setRedirecting(true);
+      }, 1800);
+      const t2 = setTimeout(() => {
+        onRetry();
+      }, 3000);
+      return () => { clearTimeout(t); clearTimeout(t2); };
+    }
     const interval = setInterval(() => {
       setStepIndex((i) => Math.min(i + 1, INTERSTITIAL_STEPS.length - 1));
     }, 700);
     return () => clearInterval(interval);
-  }, [error]);
+  }, [error, onRetry]);
 
   if (error) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-6 px-4">
-        <div className="flex flex-col items-center gap-3 max-w-sm text-center">
-          <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
-            <AlertCircle className="h-6 w-6 text-destructive" />
+      <div className="h-full flex flex-col items-center justify-center gap-8 px-4">
+        {/* Pulse ring — destructive tint */}
+        <div className="relative flex items-center justify-center">
+          <div className="absolute h-24 w-24 rounded-full bg-destructive/10 animate-ping" />
+          <div className="absolute h-16 w-16 rounded-full bg-destructive/15" />
+          <div className="relative h-12 w-12 rounded-full bg-destructive/20 border border-destructive/40 text-destructive flex items-center justify-center">
+            <AlertCircle className="h-5 w-5" />
           </div>
-          <div className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground">
+        </div>
+
+        {/* Ticker */}
+        <div className="text-center">
+          <div className="font-mono text-2xl font-bold text-destructive tracking-widest line-through opacity-60">
+            {ticker}
+          </div>
+          <div className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground mt-1">
             VALIDATION FAILED
           </div>
-          <h2 className="text-lg font-semibold text-foreground">{error}</h2>
-          <p className="text-sm text-muted-foreground">
-            Arbiter only analyzes publicly listed equities. Please check the
-            ticker symbol and try again.
+        </div>
+
+        {/* Step list — step 0 shown as failed */}
+        <div className="w-full max-w-xs space-y-2.5">
+          {INTERSTITIAL_STEPS.map((step, i) => {
+            const Icon = step.icon;
+            const isFailed = i === 0;
+            const isGhost = i > 0;
+            return (
+              <div
+                key={i}
+                className={[
+                  "flex items-center gap-3 px-4 py-2.5 rounded-lg border transition-all duration-300",
+                  isFailed
+                    ? "border-destructive/40 bg-destructive/5"
+                    : "border-transparent opacity-20",
+                ].join(" ")}
+              >
+                {isFailed ? (
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive flex-shrink-0" />
+                ) : (
+                  <Icon className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0" />
+                )}
+                <span
+                  className={[
+                    "font-mono text-[11px] tracking-wide flex-1",
+                    isFailed ? "text-destructive" : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {isFailed ? "Exchange lookup failed" : step.label}
+                </span>
+                {isFailed && (
+                  <span className="font-mono text-[9px] text-destructive">
+                    ERR
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Error message */}
+        <div className="w-full max-w-xs rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center">
+          <p className="font-mono text-[11px] text-destructive leading-relaxed">
+            {error}
           </p>
         </div>
-        <Button onClick={onRetry} variant="outline" className="gap-2">
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Try another ticker
-        </Button>
+
+        {/* Redirect notice + manual button */}
+        <div className="flex flex-col items-center gap-3">
+          <p className="font-mono text-[10px] text-muted-foreground animate-pulse">
+            {redirecting ? "REDIRECTING…" : "RETURNING TO INPUT…"}
+          </p>
+          <Button onClick={onRetry} variant="outline" size="sm" className="gap-2 font-mono text-xs">
+            <ArrowLeft className="h-3 w-3" />
+            Try another ticker
+          </Button>
+        </div>
       </div>
     );
   }
@@ -656,9 +726,11 @@ interface DemoCanvasProps {
   onReset: () => void;
   /** Called with the validated TickerMeta so parent can surface it */
   onMeta?: (meta: TickerMeta) => void;
+  /** Called when any load error occurs so parent (interstitial) can surface it */
+  onLoadError?: (msg: string) => void;
 }
 
-function DemoCanvas({ ticker, thesis, onReset, onMeta }: DemoCanvasProps) {
+function DemoCanvas({ ticker, thesis, onReset, onMeta, onLoadError }: DemoCanvasProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNode, setSelectedNode] = useState<ReasoningNode | null>(null);
@@ -717,9 +789,6 @@ function DemoCanvas({ ticker, thesis, onReset, onMeta }: DemoCanvasProps) {
       addLog("info", "Calling reasoning API…");
 
       const graph = await buildGraph(ticker, thesis);
-
-      console.log("nodes:", graph.nodes.map(n => n.id));
-      console.log("edges:", graph.edges.map(e => `${e.source} → ${e.target}`));
 
       // Surface company meta into sidebar
       if (graph.meta) {
@@ -796,6 +865,7 @@ function DemoCanvas({ ticker, thesis, onReset, onMeta }: DemoCanvasProps) {
       setError(msg);
       addLog("warn", msg);
       setLoading(false);
+      onLoadError?.(msg);
     }
   }, [ticker, thesis, fitView, addLog, onMeta, startTime]);
 
@@ -991,6 +1061,7 @@ const Demo = () => {
                   thesis={state.thesis}
                   onReset={handleReset}
                   onMeta={handleMeta}
+                  onLoadError={handleLoadError}
                 />
               </ReactFlowProvider>
             </div>
