@@ -118,10 +118,6 @@ function normalizeEdge(e: Partial<RawEdge>): RawEdge | null {
     };
 }
 
-// ─── Ticker Validation ────────────────────────────────────────────────────────
-// Uses Yahoo Finance v8 quote endpoint — no API key required, public CORS-accessible.
-// Returns the canonical longName/shortName so we can pass it to Groq for richer context.
-
 interface YahooQuoteResult {
     longName?: string;
     shortName?: string;
@@ -138,26 +134,22 @@ async function validateTicker(ticker: string): Promise<{
     reason?: string;
 }> {
     try {
-        // Yahoo Finance v8 quote endpoint — fastest path, no auth required
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
             ticker
         )}?interval=1d&range=5d`;
 
         const res = await fetch(url, {
             headers: {
-                // Yahoo occasionally 429s bots; a browser UA helps
                 "User-Agent":
                     "Mozilla/5.0 (compatible; ArbiterEngine/1.0; +https://arbiter.app)",
             },
-            signal: AbortSignal.timeout(5_000), // 5s hard timeout
+            signal: AbortSignal.timeout(5_000),
         });
 
         if (!res.ok) {
-            // 404 → unknown ticker, 429 → rate-limited (treat as valid to avoid blocking)
             if (res.status === 404) {
                 return { valid: false, reason: `Ticker "${ticker}" not found on any major exchange.` };
             }
-            // For any other HTTP error, fail open so we don't block real tickers
             console.warn(`Yahoo Finance returned ${res.status} for ${ticker} — failing open`);
             return { valid: true };
         }
@@ -171,7 +163,6 @@ async function validateTicker(ticker: string): Promise<{
 
         const meta: YahooQuoteResult = result.meta ?? {};
 
-        // Reject instruments with no price at all — indicates a bad symbol
         if (!meta.regularMarketPrice) {
             return {
                 valid: false,
@@ -179,7 +170,6 @@ async function validateTicker(ticker: string): Promise<{
             };
         }
 
-        // Reject crypto/forex if you want equities-only (optional — comment out to allow)
         const blockedTypes = ["CRYPTOCURRENCY", "CURRENCY"];
         if (meta.quoteType && blockedTypes.includes(meta.quoteType.toUpperCase())) {
             return {
@@ -190,13 +180,10 @@ async function validateTicker(ticker: string): Promise<{
 
         return { valid: true, meta };
     } catch (err) {
-        // Network timeout or fetch error — fail open to avoid blocking real tickers
         console.warn("Ticker validation fetch failed — failing open:", err);
         return { valid: true };
     }
 }
-
-// ─── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(
     req: VercelRequest,
@@ -217,7 +204,6 @@ export default async function handler(
 
     const safeTicker = ticker.trim().toUpperCase();
 
-    // ── Step 1: Validate the ticker ──────────────────────────────────────────
     const validation = await validateTicker(safeTicker);
     if (!validation.valid) {
         return res.status(422).json({
@@ -226,7 +212,6 @@ export default async function handler(
         });
     }
 
-    // Enrich the thesis with real company name if available
     const companyName =
         validation.meta?.longName ??
         validation.meta?.shortName ??
@@ -237,7 +222,6 @@ export default async function handler(
             ? thesis.trim()
             : `Evaluate the investment case for ${companyName} (${safeTicker})`;
 
-    // ── Step 2: Build the reasoning graph via Groq ───────────────────────────
     try {
         const completion = await groq.chat.completions.create({
             model: "llama-3.3-70b-versatile",
@@ -294,6 +278,20 @@ EDGE RULES:
 - weight: 0.0–1.0 (how much this edge contributes to downstream conclusion)
 - label: short phrase like "revenue quality", "margin compression risk", "re-rating catalyst"
 
+CRITICAL: You MUST return a non-empty edges array. Every node except data_ingest must have at least one incoming edge. Use the exact node ids you defined in the nodes array. Example edges array:
+[
+  {"source": "data_ingest", "target": "revenue_growth", "weight": 0.9, "label": "revenue data"},
+  {"source": "data_ingest", "target": "competitive_risk", "weight": 0.8, "label": "market data"},
+  {"source": "data_ingest", "target": "ai_adoption_catalyst", "weight": 0.75, "label": "catalyst data"},
+  {"source": "revenue_growth", "target": "valuation", "weight": 0.85, "label": "earnings quality"},
+  {"source": "margin_expansion", "target": "valuation", "weight": 0.8, "label": "margin quality"},
+  {"source": "competitive_risk", "target": "synthesis", "weight": 0.7, "label": "risk factor"},
+  {"source": "ai_adoption_catalyst", "target": "synthesis", "weight": 0.75, "label": "upside catalyst"},
+  {"source": "valuation", "target": "synthesis", "weight": 0.9, "label": "fair value"},
+  {"source": "synthesis", "target": "mandate", "weight": 1.0, "label": "final signal"}
+]
+The edges array must never be empty. Failure to return edges is an invalid response.
+
 NODE FIELDS:
 - id: snake_case, unique, descriptive (e.g. "revenue_growth", "margin_expansion")
 - title: ≤5 words, punchy
@@ -338,6 +336,20 @@ FINANCE-GRADE LANGUAGE. Be specific. Use real-world knowledge about ${companyNam
             .map(normalizeEdge)
             .filter(Boolean) as RawEdge[];
 
+        // Fallback: if model still returns no edges, generate them from node order
+        const finalEdges: RawEdge[] = edges.length > 0 ? edges : (() => {
+            const fallback: RawEdge[] = [];
+            const nodeIds = nodes.map(n => n.id);
+            for (let i = 0; i < nodeIds.length - 1; i++) {
+                fallback.push({
+                    source: nodeIds[i],
+                    target: nodeIds[i + 1],
+                    weight: 0.7,
+                });
+            }
+            return fallback;
+        })();
+
         if (nodes.length > 0) {
             nodes[nodes.length - 1].type = "mandate";
         }
@@ -364,11 +376,10 @@ FINANCE-GRADE LANGUAGE. Be specific. Use real-world knowledge about ${companyNam
 
         return res.status(200).json({
             nodes,
-            edges,
+            edges: finalEdges,
             signal,
             confidence,
             mandate_thesis,
-            // Pass validated meta back to frontend for richer display
             meta: {
                 companyName,
                 exchange: validation.meta?.exchange,
