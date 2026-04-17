@@ -118,6 +118,86 @@ function normalizeEdge(e: Partial<RawEdge>): RawEdge | null {
     };
 }
 
+// ─── Ticker Validation ────────────────────────────────────────────────────────
+// Uses Yahoo Finance v8 quote endpoint — no API key required, public CORS-accessible.
+// Returns the canonical longName/shortName so we can pass it to Groq for richer context.
+
+interface YahooQuoteResult {
+    longName?: string;
+    shortName?: string;
+    quoteType?: string;
+    exchange?: string;
+    regularMarketPrice?: number;
+    marketCap?: number;
+    currency?: string;
+}
+
+async function validateTicker(ticker: string): Promise<{
+    valid: boolean;
+    meta?: YahooQuoteResult;
+    reason?: string;
+}> {
+    try {
+        // Yahoo Finance v8 quote endpoint — fastest path, no auth required
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+            ticker
+        )}?interval=1d&range=5d`;
+
+        const res = await fetch(url, {
+            headers: {
+                // Yahoo occasionally 429s bots; a browser UA helps
+                "User-Agent":
+                    "Mozilla/5.0 (compatible; ArbiterEngine/1.0; +https://arbiter.app)",
+            },
+            signal: AbortSignal.timeout(5_000), // 5s hard timeout
+        });
+
+        if (!res.ok) {
+            // 404 → unknown ticker, 429 → rate-limited (treat as valid to avoid blocking)
+            if (res.status === 404) {
+                return { valid: false, reason: `Ticker "${ticker}" not found on any major exchange.` };
+            }
+            // For any other HTTP error, fail open so we don't block real tickers
+            console.warn(`Yahoo Finance returned ${res.status} for ${ticker} — failing open`);
+            return { valid: true };
+        }
+
+        const json = await res.json();
+        const result = json?.chart?.result?.[0];
+
+        if (!result) {
+            return { valid: false, reason: `No market data found for "${ticker}".` };
+        }
+
+        const meta: YahooQuoteResult = result.meta ?? {};
+
+        // Reject instruments with no price at all — indicates a bad symbol
+        if (!meta.regularMarketPrice) {
+            return {
+                valid: false,
+                reason: `"${ticker}" returned no market price. Check the ticker symbol.`,
+            };
+        }
+
+        // Reject crypto/forex if you want equities-only (optional — comment out to allow)
+        const blockedTypes = ["CRYPTOCURRENCY", "CURRENCY"];
+        if (meta.quoteType && blockedTypes.includes(meta.quoteType.toUpperCase())) {
+            return {
+                valid: false,
+                reason: `"${ticker}" is a ${meta.quoteType.toLowerCase()}, not an equity. Arbiter analyzes public company stocks only.`,
+            };
+        }
+
+        return { valid: true, meta };
+    } catch (err) {
+        // Network timeout or fetch error — fail open to avoid blocking real tickers
+        console.warn("Ticker validation fetch failed — failing open:", err);
+        return { valid: true };
+    }
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
 export default async function handler(
     req: VercelRequest,
     res: VercelResponse
@@ -136,11 +216,28 @@ export default async function handler(
         return res.status(400).json({ error: "Ticker required" });
 
     const safeTicker = ticker.trim().toUpperCase();
+
+    // ── Step 1: Validate the ticker ──────────────────────────────────────────
+    const validation = await validateTicker(safeTicker);
+    if (!validation.valid) {
+        return res.status(422).json({
+            error: validation.reason ?? `Unknown ticker: ${safeTicker}`,
+            code: "INVALID_TICKER",
+        });
+    }
+
+    // Enrich the thesis with real company name if available
+    const companyName =
+        validation.meta?.longName ??
+        validation.meta?.shortName ??
+        safeTicker;
+
     const safeThesis =
         typeof thesis === "string" && thesis.trim()
             ? thesis.trim()
-            : `Evaluate the investment case for ${safeTicker}`;
+            : `Evaluate the investment case for ${companyName} (${safeTicker})`;
 
+    // ── Step 2: Build the reasoning graph via Groq ───────────────────────────
     try {
         const completion = await groq.chat.completions.create({
             model: "llama-3.3-70b-versatile",
@@ -155,7 +252,15 @@ You are Arbiter, an autonomous fundamental reasoning engine for public equities.
 Your task: build a structured, auditable reasoning graph that answers a specific investment thesis about a stock.
 
 The investor's thesis: "${safeThesis}"
-The stock: ${safeTicker}
+The stock: ${safeTicker} (${companyName})
+${validation.meta?.regularMarketPrice
+                            ? `Current market price: ${validation.meta.currency ?? "USD"} ${validation.meta.regularMarketPrice}`
+                            : ""
+                        }
+${validation.meta?.marketCap
+                            ? `Market cap: ~$${(validation.meta.marketCap / 1e9).toFixed(1)}B`
+                            : ""
+                        }
 
 Return ONLY valid JSON in this exact shape — no markdown, no commentary:
 
@@ -176,7 +281,7 @@ NODE TYPES and when to use each:
 - "synthesis"    → 1 node. Synthesizes all threads into a single signal with directional bias.
 - "mandate"      → 1 node. Final investment mandate. Must reference signal and thesis directly.
 
-Total: 8–9 nodes. 
+Total: 8–9 nodes.
 
 TOPOLOGY:
 - data_ingest has NO incoming edges (it is the source)
@@ -199,8 +304,7 @@ NODE FIELDS:
 - sparkline: array of 7–8 numbers (include only for fundamental/catalyst nodes showing trends)
 - bars: array of { label, value } (include only for valuation node showing peer multiples)
 
-FINANCE-GRADE LANGUAGE. Be specific. Use real-world knowledge about ${safeTicker}.
-If ${safeTicker} is not a known public equity, still produce a coherent graph using plausible analysis — do not fail.
+FINANCE-GRADE LANGUAGE. Be specific. Use real-world knowledge about ${companyName} (${safeTicker}).
 `.trim(),
                 },
                 {
@@ -227,18 +331,21 @@ If ${safeTicker} is not a known public equity, still produce a coherent graph us
                 .json({ error: "Model returned invalid graph shape", raw });
         }
 
-        const nodes = parsed.nodes.map((n, i) => normalizeNode(n as Partial<RawNode>, i));
+        const nodes = parsed.nodes.map((n, i) =>
+            normalizeNode(n as Partial<RawNode>, i)
+        );
         const edges = (parsed.edges as Partial<RawEdge>[])
             .map(normalizeEdge)
             .filter(Boolean) as RawEdge[];
 
-        // Guarantee last node is mandate type
         if (nodes.length > 0) {
             nodes[nodes.length - 1].type = "mandate";
         }
 
         const signal: "BUY" | "SELL" | "HOLD" =
-            parsed.signal === "BUY" || parsed.signal === "SELL" || parsed.signal === "HOLD"
+            parsed.signal === "BUY" ||
+                parsed.signal === "SELL" ||
+                parsed.signal === "HOLD"
                 ? parsed.signal
                 : "HOLD";
 
@@ -248,9 +355,12 @@ If ${safeTicker} is not a known public equity, still produce a coherent graph us
                 : 0.5;
 
         const mandate_thesis =
-            typeof parsed.mandate_thesis === "string" && parsed.mandate_thesis.trim()
+            typeof parsed.mandate_thesis === "string" &&
+                parsed.mandate_thesis.trim()
                 ? parsed.mandate_thesis
-                : `${signal} signal on ${safeTicker} with ${Math.round(confidence * 100)}% confidence.`;
+                : `${signal} signal on ${safeTicker} with ${Math.round(
+                    confidence * 100
+                )}% confidence.`;
 
         return res.status(200).json({
             nodes,
@@ -258,6 +368,15 @@ If ${safeTicker} is not a known public equity, still produce a coherent graph us
             signal,
             confidence,
             mandate_thesis,
+            // Pass validated meta back to frontend for richer display
+            meta: {
+                companyName,
+                exchange: validation.meta?.exchange,
+                quoteType: validation.meta?.quoteType,
+                regularMarketPrice: validation.meta?.regularMarketPrice,
+                currency: validation.meta?.currency,
+                marketCap: validation.meta?.marketCap,
+            },
         });
     } catch (err) {
         console.error("Arbiter graph error:", err);

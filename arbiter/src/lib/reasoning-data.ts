@@ -27,8 +27,17 @@ export interface ReasoningNode {
 export interface ReasoningEdge {
   source: string;
   target: string;
-  weight: number; // 0.0 – 1.0
+  weight: number;
   label?: string;
+}
+
+export interface TickerMeta {
+  companyName: string;
+  exchange?: string;
+  quoteType?: string;
+  regularMarketPrice?: number;
+  currency?: string;
+  marketCap?: number;
 }
 
 export interface ReasoningGraph {
@@ -37,6 +46,15 @@ export interface ReasoningGraph {
   signal: "BUY" | "SELL" | "HOLD";
   confidence: number;
   mandate_thesis: string;
+  meta?: TickerMeta;
+}
+
+// Custom error class so callers can distinguish validation failures
+export class TickerValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TickerValidationError";
+  }
 }
 
 export async function buildGraph(
@@ -49,7 +67,20 @@ export async function buildGraph(
     body: JSON.stringify({ ticker, thesis }),
   });
 
-  if (!res.ok) throw new Error(`analyze API error: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+
+    // Surface ticker validation errors with a specific class
+    if (res.status === 422 && body?.code === "INVALID_TICKER") {
+      throw new TickerValidationError(
+        body.error ?? `Unknown ticker: ${ticker}`
+      );
+    }
+
+    throw new Error(
+      body?.error ?? `analyze API error: ${res.status}`
+    );
+  }
 
   const data = await res.json();
 
