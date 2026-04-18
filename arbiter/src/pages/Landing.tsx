@@ -386,7 +386,7 @@ const Landing = () => {
             <span className="font-display font-medium text-sm">Arbiter Trace</span>
           </div>
           <p className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground text-center">
-            BUILT AS A CONCEPT INSPIRED BY ALKA ARBITER · ALKA INTELLIGENCE INC. 2026
+            BUILT AS A CONCEPT INSPIRED BY ALKA ARBITER
           </p>
         </div>
       </footer>
